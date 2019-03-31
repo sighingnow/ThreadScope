@@ -24,12 +24,15 @@ import qualified Data.IntMap.Strict as IM
 import qualified Data.IntMap as IM
 #endif
 
+import Data.Vector (Vector)
+import qualified Data.Vector as V
+
 -----------------------------------------------------------------------------
 
 -- all the data from a .eventlog file
 data HECs = HECs {
        hecCount         :: Int,
-       hecTrees         :: [(DurationTree, EventTree, SparkTree)],
+       hecTrees         :: Vector (DurationTree, EventTree, SparkTree),
        hecEventArray    :: Array Int Event,
        hecLastEventTime :: Timestamp,
        maxSparkPool     :: Double,

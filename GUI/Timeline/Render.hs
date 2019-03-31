@@ -53,6 +53,9 @@ import Data.IORef
 import Control.Monad
 import qualified Data.Text as T
 
+import Data.Vector (Vector)
+import qualified Data.Vector as V
+
 -------------------------------------------------------------------------------
 
 -- | This function redraws the currently visible part of the
@@ -237,20 +240,20 @@ renderTraces params@ViewParameters{..} hecs (Rectangle rx _ry rw _rh) = do
           translate 0 (fromIntegral y)
           case trace of
              TraceHEC c ->
-               let (dtree, etree, _) = hecTrees hecs !! c
+               let (dtree, etree, _) = hecTrees hecs V.! c
                in renderHEC params startPos endPos
                     (perfNames hecs) (dtree, etree)
              TraceInstantHEC c ->
-               let (_, etree, _) = hecTrees hecs !! c
+               let (_, etree, _) = hecTrees hecs V.! c
                in renderInstantHEC params startPos endPos
                     (perfNames hecs) etree
              TraceCreationHEC c ->
-               renderSparkCreation params slice start end (prof !! c)
+               renderSparkCreation params slice start end (prof V.! c)
              TraceConversionHEC c ->
-               renderSparkConversion params slice start end (prof !! c)
+               renderSparkConversion params slice start end (prof V.! c)
              TracePoolHEC c ->
                let maxP = maxSparkPool hecs
-               in renderSparkPool params slice start end (prof !! c) maxP
+               in renderSparkPool params slice start end (prof V.! c) maxP
              TraceHistogram ->
                renderSparkHistogram params hecs
              TraceGroup _ -> error "renderTrace"

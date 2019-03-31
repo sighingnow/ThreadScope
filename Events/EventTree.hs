@@ -1,6 +1,7 @@
 module Events.EventTree (
      DurationTree(..),
      mkDurationTree,
+     mkDurationTree',
 
      runTimeOf, gcTimeOf,
      reportDurationTree,
@@ -19,6 +20,9 @@ import qualified GHC.RTS.Events as GHC
 
 import Control.Exception (assert)
 import Text.Printf
+
+import Data.Vector (Vector)
+import qualified Data.Vector as V
 
 -------------------------------------------------------------------------------
 
@@ -62,6 +66,9 @@ mkDurationTree es endTime =
   tree
  where
   tree = splitDurations es endTime
+
+mkDurationTree' :: Vector EventDuration -> Timestamp -> DurationTree
+mkDurationTree' es endTime = mkDurationTree (V.toList es) endTime
 
 splitDurations :: [EventDuration] -- events
                -> Timestamp       -- end time of last event in the list

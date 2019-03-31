@@ -21,6 +21,9 @@ import Graphics.Rendering.Cairo
 
 import Control.Monad
 
+import Data.Vector (Vector)
+import qualified Data.Vector as V
+
 -- Rendering sparks. No approximation nor extrapolation is going on here.
 -- The sample data, recalculated for a given slice size in sparkProfile,
 -- before these functions are called, is straightforwardly rendered.
@@ -39,12 +42,12 @@ spark_detail :: Int
 spark_detail = 4 -- in pixels
 
 treesProfile :: Double -> Timestamp -> Timestamp -> HECs
-             -> (Timestamp, [[SparkStats.SparkStats]])
+             -> (Timestamp, Vector [SparkStats.SparkStats])
 treesProfile scale start end hecs =
   let slice = ceiling (fromIntegral spark_detail * scale)
       pr trees = let (_, _, stree) = trees
                  in sparkProfile slice start end stree
-  in (slice, map pr (hecTrees hecs))
+  in (slice, V.map pr (hecTrees hecs))
 
 
 renderSparkCreation :: ViewParameters -> Timestamp -> Timestamp -> Timestamp

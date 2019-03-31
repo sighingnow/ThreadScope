@@ -15,6 +15,9 @@ import Graphics.Rendering.Cairo
 import Control.Monad
 import Data.List
 
+import Data.Vector (Vector)
+import qualified Data.Vector as V
+
 -- ToDo:
 --  - we average over the slice, but the point is drawn at the beginning
 --    of the slice rather than in the middle.
@@ -32,14 +35,20 @@ renderActivity ViewParameters{..} hecs start0 end0 = do
       start = (start0 `div` slice) * slice
       end   = ((end0 + slice) `div` slice) * slice
 
-      hec_profs  = map (actProfile slice start end)
-                     (map (\ (t, _, _) -> t) (hecTrees hecs))
-      total_prof = map sum (transpose hec_profs)
+      hec_profs  = V.map (actProfile slice start end)
+                     (V.map (\ (t, _, _) -> t) (hecTrees hecs))
+      total_prof = map V.sum (transpose' hec_profs)
 
 --  liftIO $ printf "%s\n" (show (map length hec_profs))
 --  liftIO $ printf "%s\n" (show (map (take 20) hec_profs))
   drawActivity hecs start end slice total_prof
                (if not bwMode then runningColour else black)
+
+transpose' :: Vector [a] -> [(Vector a)]
+transpose' xs | V.null xs || null (V.head xs) = []
+              | r <- V.length xs
+              , c <- length (V.head xs) -- TODO: optimize the `length` out
+              = [ V.generate r (\i -> xs V.! i !! j) | j <- [0..c-1]]
 
 activity_detail :: Int
 activity_detail = 4 -- in pixels

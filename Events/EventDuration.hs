@@ -6,12 +6,16 @@ module Events.EventDuration (
     isGCDuration,
     startTimeOf, endTimeOf, durationOf,
     eventsToDurations,
+    eventsToDurations',
     isDiscreteEvent
   ) where
 
 -- Imports for GHC Events
 import GHC.RTS.Events hiding (Event, GCIdle, GCWork)
 import qualified GHC.RTS.Events as GHC
+
+import Data.Vector (Vector)
+import qualified Data.Vector as V
 
 -------------------------------------------------------------------------------
 -- This datastructure is a duration-based representation of the event
@@ -99,6 +103,10 @@ eventsToDurations (event : events) =
        where (endTime, s) = case findRunThreadTime events of
                               Nothing -> error $ "findRunThreadTime for " ++ (show event)
                               Just x -> x
+
+eventsToDurations' :: Vector GHC.Event -> Vector EventDuration
+eventsToDurations' = V.fromList . eventsToDurations . V.toList
+
 
 isDiscreteEvent :: GHC.Event -> Bool
 isDiscreteEvent e =

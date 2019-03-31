@@ -47,7 +47,7 @@ source-repository head
 Executable threadscope
   Main-is:           Main.hs
   Build-Depends:     base >= 4.6 && < 5,
-                     gtk >= 0.12 && < 0.15,
+                     gtk >= 0.15,
                      cairo < 0.14,
                      glib < 0.14,
                      pango < 0.14,
@@ -63,7 +63,9 @@ Executable threadscope
                      bytestring < 0.11,
                      file-embed < 0.1,
                      template-haskell < 2.14,
-                     temporary >= 1.1 && < 1.4
+                     temporary >= 1.1 && < 1.4,
+                     vector,
+                     vector-algorithms
   if os(osx)
     build-depends:   gtk-mac-integration < 0.4
 

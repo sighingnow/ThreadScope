@@ -31,6 +31,14 @@ import Data.Set (Set)
 import System.FilePath
 import Text.Printf
 
+import Control.Monad.ST
+import Data.Vector (Vector)
+import qualified Data.Vector as V
+import qualified Data.Vector.Mutable as MV
+import qualified Data.Vector.Algorithms.Tim as V
+import qualified Data.Array.ST as STArr
+import qualified Data.Array.MArray as MArr
+
 -------------------------------------------------------------------------------
 -- import qualified GHC.RTS.Events as GHCEvents
 --
@@ -51,15 +59,20 @@ import Text.Printf
 
 -------------------------------------------------------------------------------
 
-rawEventsToHECs :: [Event] -> Timestamp
-                -> [(Double, (DurationTree, EventTree, SparkTree))]
+rawEventsToHECs :: Vector Event -> Timestamp
+                -> Vector (Double, (DurationTree, EventTree, SparkTree))
 rawEventsToHECs evs endTime
-  = map (\cap -> toTree $ L.find ((Just cap ==) . evCap . head) heclists)
-      [0 .. maximum (0 : map (fromMaybe 0 . evCap) evs)]
+  = V.map (\cap -> toTree $ L.find ((Just cap ==) . evCap . V.head) heclists)
+      (V.iterateN (max 0 (V.maximum (V.map (fromMaybe 0 . evCap) evs))) (+1) 0)
   where
     heclists =
-      L.groupBy ((==) `on` evCap) $ L.sortBy (compare `on` evCap) evs
+      groupBy' ((==) `on` evCap) $ runST $ do
+        mevs <- MV.new (V.length evs)
+        V.copy mevs evs
+        V.sortBy (compare `on` evCap) mevs
+        V.freeze mevs
 
+    toTree :: Maybe (Vector Event) -> (Double, (DurationTree, EventTree, SparkTree))
     toTree Nothing    = (0, (DurationTreeEmpty,
                              EventTree 0 0 (EventTreeLeaf []),
                              emptySparkTree))
@@ -68,8 +81,15 @@ rawEventsToHECs evs endTime
        (mkDurationTree (eventsToDurations nondiscrete) endTime,
         mkEventTree discrete endTime,
         mkSparkTree sparkD endTime))
-       where (discrete, nondiscrete) = L.partition isDiscreteEvent evs
+       where (discrete, nondiscrete) = let (xs, ys) = V.partition isDiscreteEvent evs
+                                        in (V.toList xs, V.toList ys)
              (maxSparkPool, sparkD)  = eventsToSparkDurations nondiscrete
+
+    groupBy' :: (a -> a -> Bool) -> Vector a -> [Vector a]
+    groupBy' cmp xs = if V.null xs
+                     then []
+                     else let (r1, r2) = V.span (V.head xs `cmp`) xs
+                           in r1 : groupBy' cmp r2
 
 -------------------------------------------------------------------------------
 
@@ -115,15 +135,16 @@ buildEventLog progress from =
   -- | Integer division, rounding up.
   divUp :: Timestamp -> Timestamp -> Timestamp
   divUp n k = (n + k - 1) `div` k
+
   build name evs = do
     let
       eBy1000 ev = ev{evTime = evTime ev `divUp` 1000}
-      eventsBy = map eBy1000 (events (dat evs))
+      eventsBy = V.map eBy1000 (events (dat evs))
       eventBlockEnd e | EventBlock{ end_time=t } <- evSpec e = t
       eventBlockEnd e = evTime e
 
       -- 1, to avoid graph scale 0 and division by 0 later on
-      lastTx = maximum (1 : map eventBlockEnd eventsBy)
+      lastTx = max 1 (V.maximum (V.map eventBlockEnd eventsBy))
 
       -- Add caps to perf events, using the OS thread numbers
       -- obtained from task validation data.
@@ -133,9 +154,13 @@ buildEventLog progress from =
       -- one more step in the 'perf to TS' workflow and is a bit slower
       -- (yet another event sorting and loading eventlog chunks
       -- into the CPU cache).
-      steps :: [Event] -> [(Map KernelThreadId Int, Event)]
+      maybeRightFirst e = case e of
+                            Left _ -> Nothing
+                            Right v -> Just (fst v)
+      steps :: Vector Event -> Vector (Map KernelThreadId Int, Event)
       steps evs =
-        zip (map fst $ rights $ validates capabilityTaskOSMachine evs) evs
+        -- zip (map fst $ rights $ validates capabilityTaskOSMachine evs) evs
+        V.zip (V.mapMaybe maybeRightFirst $ validates' capabilityTaskOSMachine evs) evs
       addC :: (Map KernelThreadId Int, Event) -> Event
       addC (state, ev@Event{evSpec=PerfTracepoint{tid}}) =
         case M.lookup tid state of
@@ -146,18 +171,23 @@ buildEventLog progress from =
           Nothing -> ev  -- unknown task's OS thread
           evCap  -> ev {evCap}
       addC (_, ev) = ev
-      addCaps evs = map addC (steps evs)
+      addCaps evs = V.map addC (steps evs)
 
       -- sort the events by time, add extra caps and put them in an array
-      sorted = addCaps $ sortEvents eventsBy
+      sorted = addCaps $ sortEvents' eventsBy
       maxTrees = rawEventsToHECs sorted lastTx
-      maxSparkPool = maximum (0 : map fst maxTrees)
-      trees = map snd maxTrees
+      maxSparkPool = max 0 (V.maximum (V.map fst maxTrees))
+      trees = V.map snd maxTrees
 
       -- put events in an array
-      n_events  = length sorted
-      event_arr = listArray (0, n_events-1) sorted
-      hec_count = length trees
+      n_events  = V.length sorted
+      -- event_arr = listArray (0, n_events-1) sorted
+      event_arr = STArr.runSTArray $ do
+        arr <- MArr.newArray_ (0, n_events - 1)
+        V.imapM_ (\i x -> MArr.writeArray arr i x) sorted
+        return arr
+
+      hec_count = V.length trees
 
       -- Pre-calculate the data for the sparks histogram.
       intDoub :: Integral a => a -> Double
@@ -249,7 +279,7 @@ buildEventLog progress from =
          when (hec_count == 1 || hec == 1)  -- eval only with 2nd HEC
            (return $! DeepSeq.rnf durHistogram)
 
-    zipWithM_ treeProgress [0..] trees
+    V.zipWithM_ treeProgress (V.iterateN (V.length trees) (+1) 0) trees
     ProgressView.setProgress progress hec_count hec_count
 
     -- TODO: fully evaluate HECs before returning because otherwise the last

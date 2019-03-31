@@ -4,6 +4,8 @@ where
 import Data.Word
 import GHC.RTS.Events
 
+import qualified Data.Vector as V
+
 -------------------------------------------------------------------------------
 
 
@@ -16,7 +18,7 @@ eventLog :: [Event] -> EventLog
 eventLog events =
   let eBy1000 ev = ev{evTime = evTime ev * 1000}
       eventsBy = map eBy1000 events
-  in EventLog (Header testEventTypes) (Data eventsBy)
+  in EventLog (Header testEventTypes) (Data (V.fromList eventsBy))
 
 -------------------------------------------------------------------------------
 

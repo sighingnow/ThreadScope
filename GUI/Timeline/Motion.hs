@@ -15,6 +15,9 @@ import Control.Monad
 -- import Text.Printf
 -- import Debug.Trace
 
+import Data.Vector (Vector)
+import qualified Data.Vector as V
+
 -------------------------------------------------------------------------------
 -- Zoom in works by expanding the current view such that the
 -- left hand edge of the original view remains at the same
@@ -73,8 +76,8 @@ zoomToFit TimelineState{scaleIORef, maxSpkIORef,timelineAdj,
           (sliceAll, profAll) = treesProfile newScaleValue 0 lastTx hecs
           -- TODO: verify that no empty lists possible below
           maxmap l = maximum (0 : map (maxSparkRenderedValue sliceAll) l)
-          maxAll = map maxmap profAll
-          newMaxSpkValue = maximum (0 : maxAll)
+          maxAll = V.map maxmap profAll
+          newMaxSpkValue = max 0 (V.maximum maxAll)
 
       writeIORef scaleIORef newScaleValue
       writeIORef maxSpkIORef newMaxSpkValue
