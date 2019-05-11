@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE TemplateHaskell #-}
 module GUI.Main (runGUI) where
@@ -16,6 +17,7 @@ import qualified Control.Concurrent.Chan as Chan
 import Control.Exception
 import Data.Array
 import Data.Maybe
+import System.FilePath (takeExtension)
 
 -- Imports for ThreadScope
 import qualified GUI.App as App
@@ -62,7 +64,8 @@ data EventlogState
        mfilename :: Maybe FilePath, --test traces have no filepath
        hecs      :: HECs,
        selection :: TimeSelection,
-       cursorPos :: Int
+       cursorPos :: Int,
+       dbstate   :: Maybe DBState
      }
 
 postEvent :: Chan Event -> Event -> IO ()
@@ -80,12 +83,14 @@ data Event
    | EventQuit
 
    | EventFileLoad   FilePath
+   | EventDBLoad     FilePath
    | EventTestLoad   String
    | EventFileReload
    | EventFileExport FilePath FileExportFormat
 
 -- | EventStateClear
-   | EventSetState HECs (Maybe FilePath) String Int Double
+   | EventSetState HECs (Maybe FilePath) (Maybe DBState) String Int Double
+   | EventSetStateEvents HECs (Maybe DBState) Int Double
 
    | EventShowSidebar Bool
    | EventShowEvents  Bool
@@ -103,6 +108,7 @@ data Event
 
    | EventCursorChangedIndex     Int
    | EventCursorChangedSelection TimeSelection
+   | EventTimeLineScroll         (Double, Double) Double Double
 
    | EventTracesChanged [Trace]
 
@@ -145,7 +151,9 @@ constructUI = failOnGError $ do
   }
 
   timelineWin <- timelineViewNew builder TimelineViewActions {
-    timelineViewSelectionChanged = post . EventCursorChangedSelection
+    timelineViewSelectionChanged = post . EventCursorChangedSelection,
+    timelineViewScroll           = \(lower, upper) pagesize val ->
+      post (EventTimeLineScroll (lower, upper) pagesize val)
   }
 
   eventsView <- eventsViewNew builder EventsViewActions {
@@ -200,13 +208,29 @@ eventLoop uienv@UIEnv{..} eventlogState = do
 
     dispatch EventOpenDialog _ = do
       openFileDialog mainWin $ \filename ->
-        post (EventFileLoad filename)
+        if takeExtension filename == ".db"
+           then post (EventDBLoad filename)
+           else post (EventFileLoad filename)
       continue
 
     dispatch (EventFileLoad filename) _ = do
       async "loading the eventlog" $
         loadEvents (Just filename) (registerEventsFromFile filename)
       --TODO: set state to be empty during loading
+      continue
+
+    dispatch (EventDBLoad filename) state = do
+      async "loading the eventlog db" $
+        loadEventsDBFile (Just filename) (registerEventsFromDBFile filename)
+      --TODO: set state to be empty during loading
+      continue
+
+
+    dispatch (EventTimeLineScroll (lower, upper) pagesize val) EventlogLoaded{mfilename = mfilename, dbstate = Just dbstate} = do
+      putStrLn $ "EventTimeLineScroll: " ++ show (lower, upper) ++ ", " ++ show pagesize ++ ", " ++ show val
+      loadEventsDB mfilename (registerEventsFromDB dbstate (lower, upper) pagesize val)
+      continue
+    dispatch (EventTimeLineScroll{})  _ = do
       continue
 
     dispatch (EventTestLoad testname) _ = do
@@ -226,7 +250,7 @@ eventLoop uienv@UIEnv{..} eventlogState = do
 
 --    dispatch EventClearState _
 
-    dispatch (EventSetState hecs mfilename name nevents timespan) _ =
+    dispatch (EventSetState hecs mfilename dbstate name nevents timespan) _ =
 
      -- We have to draw this ASAP, before the user manages to move
      -- the mouse away from the window, or the window is left
@@ -261,6 +285,36 @@ eventLoop uienv@UIEnv{..} eventlogState = do
           , hecs      = hecs
           , selection = PointSelection 0
           , cursorPos = 0
+          , dbstate   = dbstate
+          }
+
+    dispatch (EventSetStateEvents hecs dbstate nevents timespan) state@EventlogLoaded{mfilename = Just name} =
+     ConcurrencyControl.fullSpeed concCtl $ do
+
+      -- MainWindow.setStatusMessage mainWin $
+      --   printf "%s (%d events, %.3fs)" name nevents timespan
+
+      let mevents = Just $ hecEventArray hecs
+      -- eventsViewSetEvents eventsView mevents
+      -- startupInfoViewSetEvents startupView mevents
+      -- summaryViewSetEvents summaryView mevents
+      -- histogramViewSetHECs histogramView (Just hecs)
+      -- traceViewSetHECs traceView hecs
+      traces' <- traceViewGetTraces traceView
+      timelineWindowSetHECs' timelineWin (Just hecs)
+      timelineWindowSetTraces timelineWin traces'
+
+      -- -- We set user 'traceMarker' events as initial bookmarks.
+      -- let usrMarkers = extractUserMarkers hecs
+      -- bookmarkViewClear bookmarkView
+      -- sequence_ [ bookmarkViewAdd bookmarkView ts label
+      --           | (ts, label) <- usrMarkers ]
+      -- timelineWindowSetBookmarks timelineWin (map fst usrMarkers)
+
+      if nevents == 0
+        then continueWith NoEventlogLoaded
+        else continueWith $ state
+          { hecs      = hecs
           }
 
     dispatch EventExportDialog
@@ -428,7 +482,19 @@ eventLoop uienv@UIEnv{..} eventlogState = do
           -- Unfortunately it halts drawing of the loaded events if the user
           -- manages to move the mouse away from the window during the delay.
           --   threadDelay 100000 -- 1/10th of a second
-          post (EventSetState hecs mfilename name nevents timespan)
+          post (EventSetState hecs mfilename Nothing name nevents timespan)
+      return ()
+
+    loadEventsDBFile mfilename registerEvents = do
+      ConcurrencyControl.fullSpeed concCtl $ do
+          (hecs, dbstate, name, nevents, timespan) <- registerEvents
+          post (EventSetState hecs mfilename (Just dbstate) name nevents timespan)
+      return ()
+
+    loadEventsDB mfilename registerEvents = do
+      ConcurrencyControl.fullSpeed concCtl $ do
+          (hecs, dbstate, nevents, timespan) <- registerEvents
+          post (EventSetStateEvents hecs (Just dbstate) nevents timespan)
       return ()
 
     async doing action =

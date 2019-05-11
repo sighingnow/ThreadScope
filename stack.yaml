@@ -1,11 +1,19 @@
-resolver: lts-11.8
+resolver: lts-13.20
 packages:
 - .
+- ghc-events
+- ghc-events-sqlite
+- gtk-demo
 extra-deps:
-- Cabal-1.24.2.0
-- Win32-2.3.1.1
-- gio-0.13.5.0
-- gtk-0.14.9
-- gtk-mac-integration-0.3.4.0
-- process-1.4.3.0
+- cairo-0.13.6.0
+- gio-0.13.6.0
+- glib-0.13.7.0
+- gtk-0.15.2
+- gtk2hs-buildtools-0.13.5.0
+- pango-0.13.6.0
 flags: {}
+
+build:
+    library-profiling: true
+    executable-profiling: false
+    haddock: false

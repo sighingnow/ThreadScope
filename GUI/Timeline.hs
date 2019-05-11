@@ -9,6 +9,7 @@ module GUI.Timeline (
     timelineGetViewParameters,
     timelineGetYScaleArea,
     timelineWindowSetHECs,
+    timelineWindowSetHECs',
     timelineWindowSetTraces,
     timelineWindowSetBookmarks,
     timelineSetSelection,
@@ -61,6 +62,7 @@ data TimelineView = TimelineView {
 
 data TimelineViewActions = TimelineViewActions {
        timelineViewSelectionChanged :: TimeSelection -> IO ()
+     , timelineViewScroll           :: (Double, Double) -> Double -> Double -> IO ()
      }
 
 -- | Draw some parts of the timeline in black and white rather than colour.
@@ -118,6 +120,11 @@ timelineWindowSetHECs :: TimelineView -> Maybe HECs -> IO ()
 timelineWindowSetHECs timelineWin@TimelineView{..} mhecs = do
   writeIORef hecsIORef mhecs
   zoomToFit timelineState mhecs
+  timelineParamsChanged timelineWin
+
+timelineWindowSetHECs' :: TimelineView -> Maybe HECs -> IO ()
+timelineWindowSetHECs' timelineWin@TimelineView{..} mhecs = do
+  writeIORef hecsIORef mhecs
   timelineParamsChanged timelineWin
 
 timelineWindowSetTraces :: TimelineView -> [Trace] -> IO ()
@@ -269,7 +276,13 @@ timelineViewNew builder actions@TimelineViewActions{..} = do
   ------------------------------------------------------------------------
   -- Scroll bars
 
-  onValueChanged timelineAdj  $ queueRedrawTimelines timelineState
+  onValueChanged timelineAdj  $ do
+    lower <- adjustmentGetLower timelineAdj
+    upper <- adjustmentGetUpper timelineAdj
+    pagesize <- adjustmentGetPageSize timelineAdj
+    val <- adjustmentGetValue timelineAdj
+    timelineViewScroll (lower, upper) pagesize val
+    queueRedrawTimelines timelineState
   onValueChanged timelineVAdj $ queueRedrawTimelines timelineState
   onAdjChanged   timelineAdj  $ queueRedrawTimelines timelineState
   onAdjChanged   timelineVAdj $ queueRedrawTimelines timelineState

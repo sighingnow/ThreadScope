@@ -20,6 +20,8 @@ import qualified GHC.RTS.Events as GHC
 import Control.Exception (assert)
 import Text.Printf
 
+import GHC.Stack
+
 -------------------------------------------------------------------------------
 
 -- We map the events onto a binary search tree, so that we can easily
@@ -56,14 +58,14 @@ data DurationTree
 
 -------------------------------------------------------------------------------
 
-mkDurationTree :: [EventDuration] -> Timestamp -> DurationTree
+mkDurationTree :: HasCallStack => [EventDuration] -> Timestamp -> DurationTree
 mkDurationTree es endTime =
   -- trace (show tree) $
   tree
  where
   tree = splitDurations es endTime
 
-splitDurations :: [EventDuration] -- events
+splitDurations :: HasCallStack => [EventDuration] -- events
                -> Timestamp       -- end time of last event in the list
                -> DurationTree
 splitDurations [] _endTime =
@@ -106,7 +108,7 @@ splitDurations es endTime
     gcTime  = gcTimeOf  ltree + gcTimeOf  rtree
 
 
-splitDurationList :: [EventDuration]
+splitDurationList :: HasCallStack => [EventDuration]
                   -> [EventDuration]
                   -> Timestamp
                   -> Timestamp
@@ -170,6 +172,7 @@ data EventTree
         {-#UNPACK#-}!Timestamp -- The start time of this run-span
         {-#UNPACK#-}!Timestamp -- The end   time of this run-span
         EventNode
+    deriving Show
 
 data EventNode
   = EventSplit
@@ -187,6 +190,7 @@ data EventNode
   | EventTreeOne GHC.Event
         -- This is a space optimisation for the common case of
         -- EventTreeLeaf [e].
+  deriving Show
 
 mkEventTree :: [GHC.Event] -> Timestamp -> EventTree
 mkEventTree es endTime =

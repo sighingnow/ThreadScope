@@ -111,6 +111,7 @@ histogramViewNew builder = do
 
   -- Redrawing histogramYScaleArea
   histogramYScaleArea `onExpose` \_ -> do
+    -- return False
     maybeEventArray <- readIORef hecsIORef
     case maybeEventArray of
       Nothing -> return False

@@ -3,9 +3,18 @@ module GUI.Types (
     Trace(..),
     Timestamp,
     Interval,
+
+    -- * DB
+    DBMetaData,
+    EParsers,
+    DBState (..)
   ) where
 
 import GHC.RTS.Events
+
+import Data.Array (Array)
+import Data.Binary.Get (Get)
+import Database.SQLite.Simple (Connection)
 
 -----------------------------------------------------------------------------
 
@@ -39,3 +48,20 @@ data ViewParameters = ViewParameters {
     xScaleAreaHeight :: Int
   }
   deriving Eq
+
+-------------------------------------------------------------------------------
+-- SQLite
+
+type DBMetaData = ( Int         -- ^ n_events
+                  , Timestamp   -- ^ min_timestamp / 1000
+                  , Timestamp   -- ^ max_timestamp / 1000
+                  , Int         -- ^ n_hec
+                  )
+
+type EParsers = Array Int (Get EventInfo)
+
+data DBState = DBState {
+    meta     :: DBMetaData,
+    conn     :: Connection,
+    parsers  :: EParsers
+  }

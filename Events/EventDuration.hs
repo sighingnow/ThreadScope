@@ -97,7 +97,8 @@ eventsToDurations (event : events) =
 
     runDuration t = ThreadRun t s (evTime event) endTime
        where (endTime, s) = case findRunThreadTime events of
-                              Nothing -> error $ "findRunThreadTime for " ++ (show event)
+                              -- Nothing -> error $ "findRunThreadTime for " ++ (show event)
+                              Nothing -> (evTime event, NoStatus) -- dummy thread status
                               Just x -> x
 
 isDiscreteEvent :: GHC.Event -> Bool

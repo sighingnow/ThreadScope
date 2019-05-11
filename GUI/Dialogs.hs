@@ -49,6 +49,11 @@ openFileDialog parent  open
            windowModal := True
          ]
 
+       eventdbFiles <- fileFilterNew
+       fileFilterSetName eventdbFiles "SQLite DB files (*.db)"
+       fileFilterAddPattern eventdbFiles "*.db"
+       fileChooserAddFilter dialog eventdbFiles
+
        eventlogfiles <- fileFilterNew
        fileFilterSetName eventlogfiles "GHC eventlog files (*.eventlog)"
        fileFilterAddPattern eventlogfiles "*.eventlog"
